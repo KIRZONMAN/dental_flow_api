@@ -18,28 +18,40 @@ const historiasClinicas = require("./routes/historiasClinicas");
 
 const app = express();
 
-// Recomendado para apps detrás de proxy (Railway)
-app.set("trust proxy", 1);
-
 // Middlewares base
 app.use(cors());
 app.use(express.json());
 
-// Root simple (útil para pruebas rápidas)
-app.get("/", (_req, res) => res.send("DentalFlow API up"));
+// Home informativa (pública)
+app.get("/", (_req, res) => {
+  res.json({
+    ok: true,
+    service: "DentalFlow API",
+    version: "1.0.0",
+    health: "/health",
+    api_base: "/api",
+    tips: "Prueba /health y /api/_debug/db-ping para verificar BD.",
+    ts: new Date().toISOString()
+  });
+});
 
 // Health (público)
 app.get("/health", (_req, res) => res.json({ ok: true, ts: Date.now() }));
 
-// Si definiste API_KEY en variables de entorno, protege todo /api automáticamente
-if ((process.env.API_KEY || "").trim() !== "") {
+// 🔐 Protección por API Key opcional controlada por ENV
+// Activa solo si DEFINES API_KEY (y opcional ENABLE_API_KEY !== 'false')
+const enableApiKey =
+  (process.env.ENABLE_API_KEY ?? "true").toLowerCase() !== "false" &&
+  !!process.env.API_KEY;
+
+if (enableApiKey) {
   app.use("/api", apiKeyAuth);
-  console.log("[auth] API key enabled for /api");
-} else {
-  console.warn("[auth] API_KEY not set — /api is public for now");
 }
 
-// Subrutas
+// ---- rutas de depuración (públicas si no activas API key)
+app.use("/api/_debug", require("./routes/_debug"));
+
+// ---- Subrutas de API
 app.use("/api/usuarios", usuarios);
 app.use("/api/pacientes", pacientes);
 app.use("/api/citas", citas);
@@ -49,17 +61,18 @@ app.use("/api/roles", roles);
 app.use("/api/ordenes-laboratorio", ordenesLab);
 app.use("/api/historias-clinicas", historiasClinicas);
 
-// 404 para cualquier endpoint no encontrado
+// 404 para endpoints no encontrados
 app.use((req, res) => res.status(404).json({ ok: false, error: "Not found" }));
 
-// Manejador de errores (fallback)
+// Manejador de errores
 app.use((err, _req, res, _next) => {
   console.error("[unhandled]", err);
   res.status(500).json({ ok: false, error: "Internal error" });
 });
 
-const PORT = process.env.PORT || 3000;
-const HOST = "0.0.0.0";
+// Bind explícito de host/port (Railway setea PORT)
+const HOST = process.env.HOST || "0.0.0.0";
+const PORT = Number(process.env.PORT) || 3000;
 
 app.listen(PORT, HOST, () => {
   console.log(`DentalFlow server running on http://${HOST}:${PORT}`);

@@ -8,17 +8,15 @@ const router = express.Router();
 // ============================
 // Schemas (Zod)
 // ============================
-// Lista oficial actual (si algún día agregan "Dueño", se añade aquí y se ajusta el schema de usuarios).
 const RoleNombreEnum = z.enum(["Administrador", "Odontologo", "Asistente", "Laboratorista"]);
 
 const RoleCreate = z.object({
-  nombre: RoleNombreEnum,                              // controlamos catálogo oficial
+  nombre: RoleNombreEnum,
   descripcion: z.string().optional().transform(s => s?.trim() || undefined),
   permisos: z.array(z.string().min(1)).optional().default([]),
 });
 
 const RolePatch = z.object({
-  // ⚠️ No permitimos cambiar 'nombre' para no romper el enum del usuario y datos existentes
   descripcion: z.string().optional(),
   permisos: z.array(z.string().min(1)).optional(),
 }).refine(v => Object.keys(v).length > 0, { message: "Nada para actualizar" });
@@ -33,6 +31,16 @@ function parseBool(v) {
   if (["0","false","f","no","n"].includes(s)) return false;
   return null;
 }
+
+// ============================
+// GET /api/roles/catalogo/oficial  <-- ¡antes de :id!
+// ============================
+router.get("/catalogo/oficial", (_req, res) => {
+  res.json({
+    ok: true,
+    data: RoleNombreEnum.options,
+  });
+});
 
 // ============================
 // POST /api/roles
@@ -52,7 +60,6 @@ router.post("/", async (req, res) => {
       updatedAt: now,
     };
 
-    // respetamos índice único en nombre
     const r = await col.insertOne(doc);
     return res.status(201).json({ ok: true, id: r.insertedId.toString() });
   } catch (e) {
@@ -65,7 +72,6 @@ router.post("/", async (req, res) => {
 
 // ============================
 // GET /api/roles
-// Filtros: ?q=&page=&limit=
 // ============================
 router.get("/", async (req, res) => {
   try {
@@ -116,7 +122,6 @@ router.get("/:id", async (req, res) => {
 
 // ============================
 // PATCH /api/roles/:id
-// (solo descripcion y permisos)
 // ============================
 router.patch("/:id", async (req, res) => {
   try {
@@ -140,7 +145,6 @@ router.patch("/:id", async (req, res) => {
 
 // ============================
 // DELETE /api/roles/:id
-// Protegido si hay usuarios que referencian por rol_id o rol (string).
 // ============================
 router.delete("/:id", async (req, res) => {
   try {
@@ -151,7 +155,6 @@ router.delete("/:id", async (req, res) => {
     const role = await db.collection("roles").findOne({ _id: oid });
     if (!role) return res.status(404).json({ ok: false, error: "No encontrado" });
 
-    // ¿Está en uso?
     const [byId, byString] = await Promise.all([
       db.collection("usuarios").countDocuments({ rol_id: oid }),
       db.collection("usuarios").countDocuments({ rol: role.nombre }),
@@ -173,15 +176,6 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-// ============================
-// GET /api/roles/catalogo
-// Devuelve la lista oficial (útil para frontends)
-// ============================
-router.get("/catalogo/oficial", (_req, res) => {
-  res.json({
-    ok: true,
-    data: RoleNombreEnum.options, // ["Administrador","Odontologo","Asistente","Laboratorista"]
-  });
-});
-
 module.exports = router;
+
+//si algo sale mal hazme ctrl + z

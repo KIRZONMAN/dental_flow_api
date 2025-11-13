@@ -7,7 +7,7 @@ const router = express.Router();
 // ============================ 
 // Helpers
 // ============================
-const ESTADOS = ["Pendiente", "Confirmada", "Cancelada", "Completada"];
+const ESTADOS = ["Pendiente", "Confirmada", "En consulta", "Cancelada", "Completada"];
 
 const parseDateStrict = (v) => {
   const d = v instanceof Date ? v : new Date(v);
@@ -125,7 +125,7 @@ router.get("/", async (req, res) => {
     if (usuario_id) {
       const oid = oidMaybe(usuario_id);
       if (!oid) return res.status(400).json({ ok: false, error: "usuario_id inválido" });
-      q.usuario_id = String(usuario_id);
+      q.usuario_id = oid;
     }
     if (estado) {
       if (!ESTADOS.includes(String(estado))) {
@@ -203,7 +203,7 @@ router.get("/hoy", async (req, res) => {
     if (usuario_id) {
       const oid = oidMaybe(usuario_id);
       if (!oid) return res.status(400).json({ ok: false, error: "usuario_id inválido" });
-      q.usuario_id = String(usuario_id);
+      q.usuario_id = oid;
     }
 
     limit = Math.min(Math.max(parseInt(limit ?? "100", 10), 1), 500);
@@ -315,7 +315,19 @@ router.patch("/:id", async (req, res) => {
       if (!oid) return res.status(400).json({ ok: false, error: "usuario_id inválido" });
       $set.usuario_id = oid;
     }
-    if (parsed.estado) $set.estado = parsed.estado;
+    if (parsed.estado) {
+      $set.estado = parsed.estado;
+      if (parsed.estado === "En consulta") {
+        $set.startedAt = new Date();
+        $set.canceledAt = null; // por si venía cancelada
+      }
+      if (parsed.estado === "Completada") {
+        $set.finishedAt = new Date();
+      }
+      if (parsed.estado === "Cancelada") {
+        $set.canceledAt = new Date();
+      }
+    }
     if (parsed.motivo !== undefined) $set.motivo = parsed.motivo?.trim() || null;
 
     let procs;
